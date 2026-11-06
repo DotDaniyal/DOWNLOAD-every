@@ -1,0 +1,6 @@
+{
+  "name": "VeloceFetch Pro - Video & Playlist Downloader",
+  "description": "Production-grade desktop video and playlist downloading software with batch processing, queue management, format quality selection, and file organization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
