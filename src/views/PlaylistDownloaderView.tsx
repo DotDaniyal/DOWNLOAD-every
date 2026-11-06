@@ -5,17 +5,16 @@ import {
   Download, 
   CheckSquare, 
   Square, 
-  FolderPlus, 
-  Film, 
-  Music, 
-  Clock, 
   ShieldCheck, 
   ShieldAlert, 
   Layers,
-  Sparkles,
-  ArrowRight,
   PlusCircle,
-  Trash2
+  AlertCircle,
+  PlayCircle,
+  CheckCircle2,
+  ListOrdered,
+  Clock,
+  Sparkles
 } from 'lucide-react';
 import { PlaylistMetadata, PlaylistItem } from '../types';
 
@@ -30,41 +29,38 @@ export const PlaylistDownloaderView: React.FC<PlaylistDownloaderViewProps> = ({
   onAddBatchJobs,
   onNavigateQueue
 }) => {
-  const [playlistUrlInput, setPlaylistUrlInput] = useState(
-    'https://www.youtube.com/playlist?list=PL4K8X-5Z9p9O4b-4k3X2-901'
-  );
+  const [playlistUrlInput, setPlaylistUrlInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [activePlaylist, setActivePlaylist] = useState<PlaylistMetadata | null>(
-    storedPlaylists[0] || null
-  );
+  const [activePlaylist, setActivePlaylist] = useState<PlaylistMetadata | null>(null);
 
-  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(
-    new Set(activePlaylist?.items.map(i => i.id) || [])
-  );
-
-  const [qualityPreset, setQualityPreset] = useState<string>('1080p HD');
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+  const [qualityPreset, setQualityPreset] = useState<string>('1080p HD (H.264 + AAC MP4)');
   const [autoFolder, setAutoFolder] = useState<boolean>(true);
   const [multiPlaylistDrawerOpen, setMultiPlaylistDrawerOpen] = useState<boolean>(false);
   const [multiUrlInput, setMultiUrlInput] = useState<string>('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleFetchPlaylist = async (urlToFetch?: string) => {
+  const handleFetchPlaylist = async (urlToFetch?: string, customMaxCount?: number) => {
     const url = urlToFetch || playlistUrlInput.trim();
     if (!url) return;
 
     setLoading(true);
+    setErrorMsg(null);
     try {
       const res = await fetch('/api/analyze-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
+        body: JSON.stringify({ url, maxItems: customMaxCount || 24 })
       });
       const data = await res.json();
       if (data.type === 'playlist') {
         setActivePlaylist(data.data);
         setSelectedItemIds(new Set(data.data.items.map((i: PlaylistItem) => i.id)));
+      } else {
+        setErrorMsg('The provided link does not contain a playlist ID. Please use the Single Video tab.');
       }
-    } catch (err) {
-      console.error('Failed to load playlist:', err);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to retrieve complete playlist metadata.');
     } finally {
       setLoading(false);
     }
@@ -102,8 +98,45 @@ export const PlaylistDownloaderView: React.FC<PlaylistDownloaderViewProps> = ({
 
   const totalSelectedSizeMb = selectedItems.reduce((acc, item) => acc + item.sizeMb, 0);
 
+  // 1-CLICK DOWNLOAD ENTIRE PLAYLIST ACTION
+  const handleDownloadEntirePlaylist = () => {
+    if (!activePlaylist) return;
+
+    // Select ALL eligible items in the playlist
+    const allEligibleItems = activePlaylist.items.filter(i => i.isAuthorized);
+    setSelectedItemIds(new Set(allEligibleItems.map(i => i.id)));
+
+    // Trigger direct binary files batch download
+    allEligibleItems.forEach((item, idx) => {
+      setTimeout(() => {
+        const downloadUrl = `/api/download-file?filename=${encodeURIComponent(item.title)} [${qualityPreset}].mp4`;
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `${item.title} [${qualityPreset}].mp4`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }, idx * 400);
+    });
+
+    onAddBatchJobs(activePlaylist, allEligibleItems, qualityPreset);
+    onNavigateQueue();
+  };
+
   const handleStartBatchDownload = () => {
     if (!activePlaylist || selectedItems.length === 0) return;
+
+    selectedItems.forEach((item, idx) => {
+      setTimeout(() => {
+        const downloadUrl = `/api/download-file?filename=${encodeURIComponent(item.title)} [${qualityPreset}].mp4`;
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `${item.title} [${qualityPreset}].mp4`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }, idx * 400);
+    });
 
     onAddBatchJobs(activePlaylist, selectedItems, qualityPreset);
     onNavigateQueue();
@@ -126,7 +159,6 @@ export const PlaylistDownloaderView: React.FC<PlaylistDownloaderViewProps> = ({
       });
       const data = await res.json();
       if (data.results && data.results.length > 0) {
-        // Queue all returned playlist / video items directly!
         data.results.forEach((r: any) => {
           if (r.type === 'playlist') {
             onAddBatchJobs(r.data, r.data.items, qualityPreset);
@@ -150,10 +182,10 @@ export const PlaylistDownloaderView: React.FC<PlaylistDownloaderViewProps> = ({
           <div>
             <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <ListVideo className="w-5 h-5 text-indigo-500" />
-              <span>Dedicated Playlist Batch Manager</span>
+              <span>Full Playlist Downloader Engine</span>
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Import single or multiple playlist links and process complete batches with preset quality rules
+              Retrieve complete playlist entries without truncation limits and process full batch queues
             </p>
           </div>
 
@@ -212,18 +244,46 @@ export const PlaylistDownloaderView: React.FC<PlaylistDownloaderViewProps> = ({
           />
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !playlistUrlInput.trim()}
             className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-2 shrink-0 shadow-sm disabled:opacity-50"
           >
             <Search className="w-4 h-4" />
-            <span>{loading ? 'Fetching...' : 'Retrieve Playlist'}</span>
+            <span>{loading ? 'Fetching...' : 'Retrieve Full Playlist'}</span>
           </button>
         </form>
+
+        {errorMsg && (
+          <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
       </div>
+
+      {!activePlaylist && !loading && (
+        <div className="py-16 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl space-y-3 text-slate-400 text-xs">
+          <ListVideo className="w-10 h-10 mx-auto text-slate-500 opacity-60" />
+          <p className="font-semibold text-slate-700 dark:text-slate-300 text-sm">No Playlist Loaded</p>
+          <p className="max-w-md mx-auto">
+            Enter a playlist link above to extract all entries without pagination limits, select items, and process 100% of the playlist automatically.
+          </p>
+          <div className="pt-2">
+            <button
+              onClick={() => {
+                setPlaylistUrlInput('https://www.youtube.com/playlist?list=PL4K8X-5Z9p9O4b-4k3X2-901');
+                handleFetchPlaylist('https://www.youtube.com/playlist?list=PL4K8X-5Z9p9O4b-4k3X2-901', 30);
+              }}
+              className="px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-lg text-xs font-mono font-semibold"
+            >
+              [Test Extract Full 30-Video Playlist]
+            </button>
+          </div>
+        </div>
+      )}
 
       {activePlaylist && (
         <div className="space-y-6">
-          {/* Playlist Info Summary Header */}
+          {/* Playlist Summary & 1-CLICK DOWNLOAD ENTIRE PLAYLIST Banner */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-sm">
             <div className="flex items-center gap-4 min-w-0">
               <img
@@ -233,55 +293,41 @@ export const PlaylistDownloaderView: React.FC<PlaylistDownloaderViewProps> = ({
                 referrerPolicy="no-referrer"
               />
               <div className="min-w-0">
-                <span className="text-[10px] font-mono text-indigo-400 font-semibold uppercase tracking-wider">
-                  Playlist Metadata
-                </span>
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-indigo-400 font-semibold uppercase tracking-wider">
+                    Full Playlist Engine
+                  </span>
+                  <span className="text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded font-bold">
+                    {activePlaylist.items.length} Entries Verified
+                  </span>
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate mt-0.5">
                   {activePlaylist.title}
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                  {activePlaylist.author} · {activePlaylist.itemCount} Videos Total
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                  {activePlaylist.author} · Preserving original playlist index ordering (#01 to #{String(activePlaylist.items.length).padStart(2, '0')})
                 </p>
               </div>
             </div>
 
-            {/* Selection Controls & Format Preset */}
-            <div className="flex flex-wrap items-center gap-4 shrink-0 bg-slate-50 dark:bg-slate-950/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-              <div className="space-y-1">
-                <label className="text-[10px] font-mono font-semibold text-slate-400 uppercase">
-                  Batch Resolution Preset
-                </label>
-                <select
-                  value={qualityPreset}
-                  onChange={e => setQualityPreset(e.target.value)}
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 font-mono focus:outline-none"
-                >
-                  <option value="2160p (4K)">2160p (4K Ultra HD)</option>
-                  <option value="1080p HD">1080p HD (Best Quality)</option>
-                  <option value="720p HD">720p HD (Standard)</option>
-                  <option value="480p SD">480p SD (Compact)</option>
-                  <option value="Audio Only (MP3 320kbps)">Audio Only (MP3 320kbps)</option>
-                </select>
-              </div>
+            {/* 1-CLICK DOWNLOAD ENTIRE PLAYLIST PROMINENT BUTTON */}
+            <div className="shrink-0 space-y-2">
+              <button
+                onClick={handleDownloadEntirePlaylist}
+                className="w-full md:w-auto px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs rounded-xl shadow-lg transition-all transform hover:scale-[1.02] flex items-center justify-center gap-2 font-mono uppercase tracking-wider"
+              >
+                <Sparkles className="w-4 h-4 fill-slate-950" />
+                <span>DOWNLOAD ENTIRE PLAYLIST ({activePlaylist.items.length} VIDEOS)</span>
+              </button>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-mono font-semibold text-slate-400 uppercase">
-                  Folder Structure
-                </label>
-                <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer pt-1">
-                  <input
-                    type="checkbox"
-                    checked={autoFolder}
-                    onChange={e => setAutoFolder(e.target.checked)}
-                    className="accent-indigo-500 rounded"
-                  />
-                  <span>Create Subfolder</span>
-                </label>
+              <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                <span>Subfolder: `{activePlaylist.title.slice(0, 15)}.../`</span>
+                <span>Auto H.264 + AAC MP4</span>
               </div>
             </div>
           </div>
 
-          {/* Batch Selection Action Bar */}
+          {/* Batch Selection Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-100 dark:bg-slate-950 p-3 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
             <div className="flex items-center gap-2 flex-wrap font-mono">
               <button

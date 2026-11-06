@@ -11,9 +11,8 @@ import {
   Play,
   X,
   ListVideo,
-  Video,
-  FileText,
-  ExternalLink
+  PlaySquare,
+  FileText
 } from 'lucide-react';
 import { DownloadJob, PlaylistMetadata } from '../types';
 
@@ -55,6 +54,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     setUrlInput('');
   };
 
+  const handleDemoTestClick = (demoUrl: string) => {
+    onAnalyzeUrl(demoUrl);
+  };
+
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Quick URL Input Hero Bar */}
@@ -64,10 +67,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="text-xs font-mono font-semibold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded border border-emerald-500/20">
               FAST IMPORT ENGINE
             </span>
-            <span className="text-xs text-slate-400">Supports YouTube, Vimeo &amp; Playlist URLs</span>
+            <span className="text-xs text-slate-400">Supports YouTube, Vimeo &amp; Playlist Links</span>
           </div>
           <h2 className="text-xl font-bold tracking-tight text-white">
-            Import Any Video or Full Playlist URL
+            Import Any Video or Playlist URL
           </h2>
           <form onSubmit={handleQuickAnalyze} className="flex items-center gap-2 pt-1">
             <div className="relative flex-1">
@@ -82,12 +85,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
             <button
               type="submit"
-              className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs rounded-lg transition-colors flex items-center gap-2 shrink-0 shadow-sm"
+              disabled={!urlInput.trim()}
+              className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs rounded-lg transition-colors flex items-center gap-2 shrink-0 shadow-sm disabled:opacity-50"
             >
               <Search className="w-4 h-4" />
               <span>Analyze Media</span>
             </button>
           </form>
+
+          {/* Test Link Shortcuts */}
+          <div className="flex items-center gap-2 pt-2 text-[11px] font-mono text-slate-400">
+            <span>Quick Test Links:</span>
+            <button
+              type="button"
+              onClick={() => handleDemoTestClick('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4')}
+              className="text-emerald-400 hover:underline"
+            >
+              [Sample HD Video]
+            </button>
+            <span>·</span>
+            <button
+              type="button"
+              onClick={() => handleDemoTestClick('https://www.youtube.com/playlist?list=PL4K8X-5Z9p9O4b-4k3X2-901')}
+              className="text-indigo-400 hover:underline"
+            >
+              [Sample Playlist]
+            </button>
+          </div>
         </div>
       </div>
 
@@ -146,15 +170,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* Active Download Jobs Live Tracker */}
+      {/* Active Download Jobs Section */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <ListOrdered className="w-4 h-4 text-emerald-500" />
-              <span>Active &amp; Paused Jobs ({activeJobs.length})</span>
+              <span>Active &amp; Queue Jobs ({activeJobs.length})</span>
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Real-time speed &amp; progress telemetry</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Real-time download speed &amp; byte progress</p>
           </div>
           <button
             onClick={() => onNavigateTab('queue')}
@@ -166,8 +190,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {activeJobs.length === 0 ? (
-          <div className="py-8 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-lg text-slate-400 text-xs">
-            No active downloads at the moment. Import a link or start a playlist to begin!
+          <div className="py-10 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-lg text-slate-400 text-xs space-y-2">
+            <PlaySquare className="w-8 h-8 mx-auto text-slate-500 opacity-50" />
+            <p className="font-semibold text-slate-700 dark:text-slate-300">No active downloads in queue</p>
+            <p className="text-slate-500 max-w-sm mx-auto">
+              Paste a URL above or switch to Single Video / Playlist Downloader to queue media downloads directly to your device.
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -245,110 +273,56 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         )}
       </div>
 
-      {/* Featured Playlist Shortcuts & Recent Downloads */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Playlists Quick Importer Cards */}
-        <div className="lg:col-span-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <ListVideo className="w-4 h-4 text-indigo-500" />
-              <span>Playlist Presets</span>
-            </h3>
-            <button
-              onClick={() => onNavigateTab('playlist')}
-              className="text-xs text-indigo-600 dark:text-indigo-400 font-medium hover:underline"
-            >
-              Open Playlist Manager
-            </button>
-          </div>
+      {/* Recent Completed Downloads */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+            <span>Recently Completed Downloads</span>
+          </h3>
+          <button
+            onClick={() => onNavigateTab('library')}
+            className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 font-medium"
+          >
+            Go to Media Library
+          </button>
+        </div>
 
-          <div className="space-y-3">
-            {playlists.map(pl => (
-              <div
-                key={pl.id}
-                onClick={() => {
-                  onNavigateTab('playlist');
-                }}
-                className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 hover:border-indigo-500/50 cursor-pointer transition-colors space-y-2 group"
-              >
-                <div className="flex items-center gap-3">
+        {recentCompleted.length === 0 ? (
+          <div className="py-8 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-lg text-slate-400 text-xs">
+            No completed downloads yet. Import a link to save your first video file!
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            {recentCompleted.map(job => (
+              <div key={job.id} className="py-2.5 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   <img
-                    src={pl.thumbnail}
-                    alt={pl.title}
-                    className="w-12 h-10 object-cover rounded border border-slate-700 shrink-0"
+                    src={job.thumbnail}
+                    alt={job.title}
+                    className="w-10 h-8 object-cover rounded border border-slate-700 shrink-0"
                     referrerPolicy="no-referrer"
                   />
                   <div className="min-w-0 flex-1">
-                    <h4 className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate group-hover:text-indigo-400 transition-colors">
-                      {pl.title}
-                    </h4>
+                    <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
+                      {job.title}
+                    </p>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                      {pl.author} · {pl.itemCount} Videos
+                      {job.quality} · {job.totalSizeMb} MB · {job.fileName}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-indigo-500 font-medium font-mono pt-1 border-t border-slate-200 dark:border-slate-800/60">
-                  <span>Batch Ready</span>
-                  <span className="flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
-                    Import Batch <ArrowRight className="w-3 h-3" />
-                  </span>
-                </div>
+                <button
+                  onClick={() => onPlayMedia(job)}
+                  className="px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold rounded border border-emerald-500/30 transition-colors flex items-center gap-1.5 shrink-0"
+                >
+                  <Play className="w-3 h-3 fill-current" />
+                  <span>Play Media</span>
+                </button>
               </div>
             ))}
           </div>
-        </div>
-
-        {/* Recent Completed Downloads */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-              <span>Recently Completed Downloads</span>
-            </h3>
-            <button
-              onClick={() => onNavigateTab('library')}
-              className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 font-medium"
-            >
-              Go to Media Library
-            </button>
-          </div>
-
-          {recentCompleted.length === 0 ? (
-            <div className="py-8 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-lg text-slate-400 text-xs">
-              No completed downloads yet.
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
-              {recentCompleted.map(job => (
-                <div key={job.id} className="py-2.5 flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <img
-                      src={job.thumbnail}
-                      alt={job.title}
-                      className="w-10 h-8 object-cover rounded border border-slate-700 shrink-0"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
-                        {job.title}
-                      </p>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                        {job.quality} · {job.totalSizeMb} MB · {job.fileName}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => onPlayMedia(job)}
-                    className="px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold rounded border border-emerald-500/30 transition-colors flex items-center gap-1.5 shrink-0"
-                  >
-                    <Play className="w-3 h-3 fill-current" />
-                    <span>Play Media</span>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );

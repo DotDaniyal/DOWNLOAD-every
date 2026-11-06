@@ -6,13 +6,13 @@ import {
   Check, 
   ShieldAlert, 
   ShieldCheck, 
-  Clock, 
   Eye, 
   Music, 
   Film,
   ExternalLink,
   Copy,
-  Plus
+  Folder,
+  AlertCircle
 } from 'lucide-react';
 import { VideoMetadata, FormatOption } from '../types';
 
@@ -37,55 +37,39 @@ export const SingleVideoView: React.FC<SingleVideoViewProps> = ({
   onAddJob,
   onNavigateQueue
 }) => {
-  const [urlInput, setUrlInput] = useState('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4');
+  const [urlInput, setUrlInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [videoData, setVideoData] = useState<VideoMetadata | null>({
-    id: 'bbb-1080p',
-    title: 'Big Buck Bunny (Official 4K / 1080p Open Movie)',
-    author: 'Blender Foundation',
-    duration: 596,
-    durationFormatted: '09:56',
-    thumbnail: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=800&auto=format&fit=crop&q=80',
-    views: '14.2M',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-    isAuthorized: true,
-    category: 'Animation',
-    formats: [
-      { quality: '2160p (4K)', ext: 'mp4', sizeMb: 450, codec: 'H.264 / AAC', fps: 60 },
-      { quality: '1440p (2K)', ext: 'mp4', sizeMb: 280, codec: 'H.264 / AAC', fps: 60 },
-      { quality: '1080p HD', ext: 'mp4', sizeMb: 158, codec: 'H.264 / AAC', fps: 60 },
-      { quality: '720p HD', ext: 'mp4', sizeMb: 85, codec: 'H.264 / AAC', fps: 30 },
-      { quality: '480p SD', ext: 'mp4', sizeMb: 42, codec: 'H.264 / AAC', fps: 30 },
-      { quality: '360p SD', ext: 'mp4', sizeMb: 24, codec: 'H.264 / AAC', fps: 30 },
-      { quality: 'Audio Only (MP3 320kbps)', ext: 'mp3', sizeMb: 14, codec: 'MP3', fps: 0 },
-      { quality: 'Audio Only (M4A 256kbps)', ext: 'm4a', sizeMb: 11, codec: 'AAC', fps: 0 }
-    ]
-  });
-
-  const [selectedFormat, setSelectedFormat] = useState<FormatOption | null>(
-    videoData ? videoData.formats[2] : null // 1080p default
-  );
-
+  const [videoData, setVideoData] = useState<VideoMetadata | null>(null);
+  const [selectedFormat, setSelectedFormat] = useState<FormatOption | null>(null);
   const [copied, setCopied] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!urlInput.trim()) return;
 
     setLoading(true);
+    setErrorMsg(null);
     try {
       const res = await fetch('/api/analyze-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: urlInput.trim() })
       });
+
+      if (!res.ok) {
+        throw new Error(`Server returned status ${res.status}`);
+      }
+
       const data = await res.json();
       if (data.type === 'video') {
         setVideoData(data.data);
-        setSelectedFormat(data.data.formats ? data.data.formats[0] : null);
+        setSelectedFormat(data.data.formats && data.data.formats.length > 0 ? data.data.formats[0] : null);
+      } else {
+        setErrorMsg('The provided URL appears to be a playlist. Please use the Playlist Downloader tab.');
       }
-    } catch (err) {
-      console.error('Failed to analyze video URL:', err);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to fetch video metadata from the provided URL.');
     } finally {
       setLoading(false);
     }
@@ -95,10 +79,20 @@ export const SingleVideoView: React.FC<SingleVideoViewProps> = ({
     if (!videoData || !selectedFormat) return;
 
     if (!videoData.isAuthorized) {
-      alert("Downloading this video is restricted due to copyright or DRM terms. Official viewing options are available.");
+      alert("Downloading this video is restricted due to YouTube terms or copyright. Official viewing options are available.");
       return;
     }
 
+    // Trigger local browser binary download to user's hard drive
+    const downloadUrl = `/api/download-file?filename=${encodeURIComponent(videoData.title)} [${selectedFormat.quality}].${selectedFormat.ext}`;
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = `${videoData.title} [${selectedFormat.quality}].${selectedFormat.ext}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    // Queue in app download manager
     onAddJob({
       title: videoData.title,
       url: videoData.url,
@@ -110,7 +104,7 @@ export const SingleVideoView: React.FC<SingleVideoViewProps> = ({
       ext: selectedFormat.ext,
       sizeMb: selectedFormat.sizeMb,
       isAuthorized: videoData.isAuthorized,
-      mediaStreamUrl: videoData.url
+      mediaStreamUrl: downloadUrl
     });
 
     onNavigateQueue();
@@ -128,26 +122,43 @@ export const SingleVideoView: React.FC<SingleVideoViewProps> = ({
       {/* URL Input Bar */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-3 shadow-sm">
         <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-          Enter Individual Video Link
+          Enter Exact Video Link
         </label>
         <form onSubmit={handleAnalyze} className="flex items-center gap-2">
           <input
             type="text"
             value={urlInput}
             onChange={e => setUrlInput(e.target.value)}
-            placeholder="Paste YouTube, Vimeo or MP4 URL (e.g. https://www.youtube.com/watch?v=...)"
+            placeholder="Paste exact YouTube, Vimeo or MP4 URL (e.g. https://www.youtube.com/watch?v=...)"
             className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-4 py-2.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-emerald-500 font-mono"
           />
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !urlInput.trim()}
             className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs rounded-lg transition-colors flex items-center gap-2 shrink-0 shadow-sm disabled:opacity-50"
           >
             <Search className="w-4 h-4" />
-            <span>{loading ? 'Analyzing...' : 'Analyze Video'}</span>
+            <span>{loading ? 'Fetching...' : 'Analyze Media'}</span>
           </button>
         </form>
+
+        {errorMsg && (
+          <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
       </div>
+
+      {!videoData && !loading && (
+        <div className="py-16 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl space-y-3 text-slate-400 text-xs">
+          <Video className="w-10 h-10 mx-auto text-slate-500 opacity-60" />
+          <p className="font-semibold text-slate-700 dark:text-slate-300 text-sm">No Video Selected</p>
+          <p className="max-w-md mx-auto">
+            Paste an exact video URL above to retrieve real metadata, format quality options, and download directly to your local device.
+          </p>
+        </div>
+      )}
 
       {videoData && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -160,11 +171,6 @@ export const SingleVideoView: React.FC<SingleVideoViewProps> = ({
                 className="w-full aspect-video object-cover"
                 referrerPolicy="no-referrer"
               />
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="w-12 h-12 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center shadow-lg font-bold">
-                  ▶
-                </span>
-              </div>
               <div className="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-[11px] font-mono text-white">
                 {videoData.durationFormatted}
               </div>
@@ -191,13 +197,13 @@ export const SingleVideoView: React.FC<SingleVideoViewProps> = ({
               </h3>
 
               <div className="grid grid-cols-2 gap-2 text-xs text-slate-500 dark:text-slate-400 font-mono pt-2 border-t border-slate-200 dark:border-slate-800">
-                <div className="flex items-center gap-1.5">
-                  <Film className="w-3.5 h-3.5 text-slate-400" />
+                <div className="flex items-center gap-1.5 truncate">
+                  <Film className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   <span className="truncate">{videoData.author}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <Eye className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{videoData.views} Views</span>
+                  <Eye className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span>{videoData.views}</span>
                 </div>
               </div>
             </div>
@@ -205,7 +211,7 @@ export const SingleVideoView: React.FC<SingleVideoViewProps> = ({
             {!videoData.isAuthorized && (
               <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs space-y-2">
                 <p className="font-semibold flex items-center gap-1.5 text-amber-400">
-                  <ShieldAlert className="w-4 h-4 shrink-0" /> Notice: Copyright Restriction
+                  <ShieldAlert className="w-4 h-4 shrink-0" /> Copyright Protection Notice
                 </p>
                 <p className="text-[11px] leading-relaxed text-amber-200/90">
                   {videoData.restrictionNotice}
@@ -226,10 +232,10 @@ export const SingleVideoView: React.FC<SingleVideoViewProps> = ({
           <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-5 shadow-sm">
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                Select Available Media Quality
+                Select Available Media Format
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Choose video resolution or audio-only extraction format
+                Select video resolution or audio extraction quality
               </p>
             </div>
 
@@ -278,11 +284,11 @@ export const SingleVideoView: React.FC<SingleVideoViewProps> = ({
             <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-3">
               <button
                 onClick={handleStartDownload}
-                disabled={!videoData.isAuthorized}
+                disabled={!videoData.isAuthorized || !selectedFormat}
                 className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition-colors flex items-center gap-2 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Download className="w-4 h-4" />
-                <span>Download Selected ({selectedFormat?.quality})</span>
+                <span>Save Directly to Device ({selectedFormat?.quality})</span>
               </button>
 
               <button
@@ -290,7 +296,7 @@ export const SingleVideoView: React.FC<SingleVideoViewProps> = ({
                 className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg transition-colors flex items-center gap-2"
               >
                 {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                <span>{copied ? 'Copied Direct URL' : 'Copy Direct URL'}</span>
+                <span>{copied ? 'Copied Direct Link' : 'Copy Direct Link'}</span>
               </button>
             </div>
           </div>

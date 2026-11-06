@@ -1,10 +1,30 @@
 export type DownloadStatus = 'queued' | 'downloading' | 'paused' | 'completed' | 'failed' | 'restricted';
 
+export interface SystemCapabilities {
+  os: string;
+  arch: string;
+  ramGb: number;
+  cpuCores: number;
+  gpuName?: string;
+  supportsH264: boolean;
+  supportsAAC: boolean;
+  supportsVP9: boolean;
+  supportsAV1: boolean;
+  supportsHEVC: boolean;
+  recommendedContainer: 'mp4';
+  recommendedVideoCodec: 'h264';
+  recommendedAudioCodec: 'aac';
+  maxRecommendedResolution: '2160p' | '1080p' | '720p';
+}
+
 export interface FormatOption {
   quality: string;
   ext: 'mp4' | 'mp3' | 'm4a' | 'webm';
   sizeMb: number;
   codec: string;
+  videoCodec?: string;
+  audioCodec?: string;
+  isAutoCompatible?: boolean;
   fps?: number;
 }
 
@@ -59,6 +79,9 @@ export interface DownloadJob {
   durationFormatted: string;
   quality: string;
   ext: string;
+  videoCodec: string;
+  audioCodec: string;
+  isFFmpegVerified?: boolean;
   totalSizeMb: number;
   downloadedSizeMb: number;
   speedMbPerSec: number;
@@ -86,6 +109,7 @@ export interface AppSettings {
   speedLimitMb: number; // 0 for unlimited
   notificationSound: boolean;
   theme: 'dark' | 'light';
+  compatibilityMode: 'auto' | 'manual'; // Auto Compatibility Mode by default!
   acknowledgedLegalTerms: boolean;
 }
 
